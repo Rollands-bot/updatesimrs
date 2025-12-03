@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+  // Gunakan relative path '/api' supaya otomatis ikut domain (baik localhost maupun hosting)
+  // Di localhost, vite.config.js yang akan nge-proxy '/api' ke port 3001
+  baseURL: '/api',
 });
 
 export default api;

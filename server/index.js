@@ -7,11 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Root route for checking status
-app.get("/", (req, res) => {
-  res.send("SIMRS API is running");
-});
-
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
@@ -22,10 +17,18 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl || "", supabaseKey || "");
 
-// --- Routes ---
+// Create a router to handle all routes
+const router = express.Router();
+
+// Root route for checking status within the router
+router.get("/", (req, res) => {
+  res.send("SIMRS API is running");
+});
+
+// --- Routes (Moved to router) ---
 
 // 1. Add Patient
-app.post("/patients", async (req, res) => {
+router.post("/patients", async (req, res) => {
   try {
     const { name, nik, phone, address } = req.body;
     const { data, error } = await supabase
@@ -41,7 +44,7 @@ app.post("/patients", async (req, res) => {
 });
 
 // 2. Get All Patients
-app.get("/patients", async (req, res) => {
+router.get("/patients", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("patients")
@@ -56,7 +59,7 @@ app.get("/patients", async (req, res) => {
 });
 
 // 3. Create Visit
-app.post("/visits", async (req, res) => {
+router.post("/visits", async (req, res) => {
   try {
     const { patient_id, doctor } = req.body;
     const { data, error } = await supabase
@@ -72,7 +75,7 @@ app.post("/visits", async (req, res) => {
 });
 
 // 4. Get Visits (Optional: Filter by status or date could be added later)
-app.get("/visits", async (req, res) => {
+router.get("/visits", async (req, res) => {
   try {
     // Join with patients table to get patient name and transactions for billing state
     const { data, error } = await supabase
@@ -88,7 +91,7 @@ app.get("/visits", async (req, res) => {
 });
 
 // 5. Add Medical Record
-app.post("/medical-records", async (req, res) => {
+router.post("/medical-records", async (req, res) => {
   try {
     const { visit_id, diagnosis, notes } = req.body;
     
@@ -110,7 +113,7 @@ app.post("/medical-records", async (req, res) => {
 });
 
 // 6. Create/Update Transaction (Billing)
-app.post("/transactions", async (req, res) => {
+router.post("/transactions", async (req, res) => {
   try {
     const { visit_id, amount, status } = req.body;
     const { data, error } = await supabase
@@ -145,7 +148,7 @@ app.post("/transactions", async (req, res) => {
 });
 
 // 7. Get Transactions for billing overview
-app.get("/transactions", async (req, res) => {
+router.get("/transactions", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("transactions")
@@ -161,7 +164,7 @@ app.get("/transactions", async (req, res) => {
 });
 
 // 8. Search Patients
-app.get("/patients/search", async (req, res) => {
+router.get("/patients/search", async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) {
@@ -183,7 +186,7 @@ app.get("/patients/search", async (req, res) => {
 });
 
 // 9. Search Visits with patient info
-app.get("/visits/search", async (req, res) => {
+router.get("/visits/search", async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) {
@@ -205,7 +208,7 @@ app.get("/visits/search", async (req, res) => {
 });
 
 // 10. Search Transactions
-app.get("/transactions/search", async (req, res) => {
+router.get("/transactions/search", async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) {
@@ -227,7 +230,7 @@ app.get("/transactions/search", async (req, res) => {
 });
 
 // 11. Get Medical History for a Patient
-app.get("/medical-records/:patientId", async (req, res) => {
+router.get("/medical-records/:patientId", async (req, res) => {
   try {
     const { patientId } = req.params;
     
@@ -249,7 +252,7 @@ app.get("/medical-records/:patientId", async (req, res) => {
 // 12. User Management Routes (Supabase Auth)
 
 // Login
-app.post("/login", async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
     const { data: user, error } = await supabase
@@ -273,7 +276,7 @@ app.post("/login", async (req, res) => {
 });
 
 // Get Users
-app.get("/users", async (req, res) => {
+router.get("/users", async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from("users")
@@ -288,7 +291,7 @@ app.get("/users", async (req, res) => {
 });
 
 // Create User
-app.post("/users", async (req, res) => {
+router.post("/users", async (req, res) => {
   try {
     const { username, password, role, name } = req.body;
     
@@ -329,7 +332,7 @@ app.post("/users", async (req, res) => {
 });
 
 // Delete User
-app.delete("/users/:id", async (req, res) => {
+router.delete("/users/:id", async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -345,6 +348,12 @@ app.delete("/users/:id", async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// Mount the router to handle requests
+// Handle /api prefix (for Vercel/Production where rewrites add /api)
+app.use("/api", router);
+// Handle root (for Localhost where we hit http://localhost:3001/login directly)
+app.use("/", router);
 
 // Export app for Vercel
 module.exports = app;
