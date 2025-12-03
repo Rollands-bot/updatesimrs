@@ -34,7 +34,7 @@ export default function Login() {
 
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-6">
-            {error}
+            {typeof error === 'object' ? JSON.stringify(error) : error}
           </div>
         )}
 
