@@ -8,14 +8,30 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+let supabase;
+try {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-    console.warn("Supabase credentials missing in .env file. Please configure SUPABASE_URL and SUPABASE_KEY.");
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn("Supabase credentials missing in .env file.");
+  }
+  
+  supabase = createClient(supabaseUrl || "https://placeholder.supabase.co", supabaseKey || "placeholder");
+} catch (err) {
+  console.error("Supabase init failed:", err);
 }
 
-const supabase = createClient(supabaseUrl || "", supabaseKey || "");
+// Middleware to check DB connection before handling requests
+const checkDb = (req, res, next) => {
+  if (!supabase || !process.env.SUPABASE_URL) {
+    return res.status(500).json({ 
+      error: "Database connection not configured. Please set SUPABASE_URL and SUPABASE_KEY in Vercel Settings." 
+    });
+  }
+  next();
+};
+
 
 // Create a router to handle all routes
 const router = express.Router();
@@ -24,6 +40,9 @@ const router = express.Router();
 router.get("/", (req, res) => {
   res.send("SIMRS API is running");
 });
+
+// Apply DB Check Middleware to all API routes
+router.use(checkDb);
 
 // --- Routes (Moved to router) ---
 
