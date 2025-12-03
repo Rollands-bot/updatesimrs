@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1764705853532,
+    "username": "Wahyu",
+    "password": "Rahasia051200.",
+    "role": "super_admin",
+    "name": "PROGRAMMER IT"
+  },
+  {
+    "id": 1764706645242,
+    "username": "Tuti",
+    "password": "123",
+    "role": "staff_pendaftaran",
+    "name": "Staff 1"
+  },
+  {
+    "id": 1764706832318,
+    "username": "DRS. Agung",
+    "password": "123",
+    "role": "dokter",
+    "name": "Dokter"
+  },
+  {
+    "id": 1764706966525,
+    "username": "siti",
+    "password": "123",
+    "role": "kasir",
+    "name": "Petugas Kasir"
+  }
+]
