@@ -346,5 +346,11 @@ app.delete("/users/:id", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Export app for Vercel
+module.exports = app;
+
+// Only listen if not running in Vercel (Vercel handles this automatically)
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
