@@ -25,6 +25,7 @@ try {
 // Middleware to check DB connection before handling requests
 const checkDb = (req, res, next) => {
   if (!supabase || !process.env.SUPABASE_URL) {
+    console.error("Database check failed. ENV:", process.env.SUPABASE_URL ? "Set" : "Missing", "Supabase Client:", !!supabase);
     return res.status(500).json({ 
       error: "Database connection not configured. Please set SUPABASE_URL and SUPABASE_KEY in Vercel Settings." 
     });
