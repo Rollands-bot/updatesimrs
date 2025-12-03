@@ -355,8 +355,13 @@ app.use("/api", router);
 // Handle root (for Localhost where we hit http://localhost:3001/login directly)
 app.use("/", router);
 
-// Export app for Vercel
-module.exports = app;
+// Export app for Vercel (Serverless Handler)
+module.exports = (req, res) => {
+  // Vercel kadang nambahin /api di depan path, kita strip biar router Express tetep jalan normal
+  // tapi karena kita udah pake router mounting, harusnya aman.
+  // Kita wrap app express sebagai handler function.
+  return app(req, res);
+};
 
 // Only listen if not running in Vercel (Vercel handles this automatically)
 if (require.main === module) {

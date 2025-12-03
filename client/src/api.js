@@ -1,8 +1,11 @@
 import axios from 'axios';
 
+const isProduction = import.meta.env.PROD;
+// Di production (Vercel), backend ada di /api
+// Di local, kita pake proxy /api -> localhost:3001
+// PENTING: BaseURL harus '/api' biar rewrite di vercel.json jalan.
+
 const api = axios.create({
-  // Gunakan relative path '/api' supaya otomatis ikut domain (baik localhost maupun hosting)
-  // Di localhost, vite.config.js yang akan nge-proxy '/api' ke port 3001
   baseURL: '/api',
 });
 
