@@ -6,6 +6,9 @@ import { useMemo } from 'react';
 export default function Visits() {
   const [patients, setPatients] = useState([]);
   const [visits, setVisits] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [polyclinics, setPolyclinics] = useState([]);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(10);
   
@@ -16,18 +19,40 @@ export default function Visits() {
   
   const [formData, setFormData] = useState({
     patient_id: '',
-    doctor: 'Poli Kebidanan & Kandungan'
+    doctor_id: '',
+    polyclinic_id: ''
   });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchPatients();
     fetchVisits();
+    fetchMasterData();
+    // Initial fetch for patients (top 50)
+    fetchPatients();
   }, []);
 
-  const fetchPatients = async () => {
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchPatients(patientSearch);
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [patientSearch]);
+
+  const fetchMasterData = async () => {
     try {
-      const res = await api.get('/patients');
+      const [docRes, poliRes] = await Promise.all([
+        api.get('/master/doctors'),
+        api.get('/master/polyclinics')
+      ]);
+      setDoctors(docRes.data);
+      setPolyclinics(poliRes.data);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchPatients = async (query = '') => {
+    try {
+      const params = query ? { q: query } : {};
+      const res = await api.get('/patients', { params });
       setPatients(res.data);
     } catch (err) { console.error(err); }
   };
@@ -39,53 +64,34 @@ export default function Visits() {
     } catch (err) { console.error(err); }
   };
 
-  // Get list of patient IDs who currently have active visits (registered or in_consultation)
-  // AND also patients who have visits that are 'closed' or 'paid' TODAY (to prevent multiple visits same day if that's the rule)
-  // Request says: "jika pasien terdaftar sudah membayar lunas, jangan biarkan masih ada daftarnya di halaman visit bag buat kunjungan baru"
-  // Interpretation: If patient has ANY visit today (active OR completed/paid), they shouldn't be in the "Create New" list.
   const activePatientIds = useMemo(() => {
     const today = new Date().toDateString();
     return new Set(visits
       .filter(v => {
         const visitDate = new Date(v.created_at).toDateString();
-        // Check if visit is today AND status is registered, in_consultation, closed, or paid
         return visitDate === today && (
           v.status === 'registered' || 
           v.status === 'in_consultation' || 
-          v.status === 'closed' || 
-          v.status === 'paid'
+          v.status === 'pharmacy' ||
+          v.status === 'payment_pending' ||
+          v.status === 'billing' ||
+          v.status === 'paid' || 
+          v.status === 'completed'
         );
       })
       .map(v => v.patient_id));
   }, [visits]);
 
   const filteredPatients = useMemo(() => {
-    // First filter by search query
-    let results = patients;
-    
-    if (patientSearch) {
-      results = results.filter(p => 
-        p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
-        (p.nik && p.nik.includes(patientSearch)) ||
-        (!isNaN(patientSearch) && (
-          String(p.id) === String(Number(patientSearch)) || 
-          String(p.id).padStart(3, '0') === patientSearch
-        ))
-      );
-    }
-
-    // Then filter out patients who already have active visits
-    // Unless they are the currently selected patient (in case we want to keep them visible while selected)
-    // But for "Create New", we usually don't want to select them again.
-    results = results.filter(p => !activePatientIds.has(p.id));
-
-    return results.slice(0, 20); // Limit results
-  }, [patients, patientSearch, activePatientIds]);
+    // Server already filtered by search query (in patients state)
+    // We just need to filter out active patients
+    let results = patients.filter(p => !activePatientIds.has(p.id));
+    return results.slice(0, 20);
+  }, [patients, activePatientIds]);
 
   const filteredVisits = useMemo(() => {
     return searchQuery ? visits.filter(v => 
       v.patients?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.doctor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       v.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (!isNaN(searchQuery) && (
         String(v.id) === String(Number(searchQuery)) || 
@@ -105,18 +111,36 @@ export default function Visits() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.patient_id) return alert("Pilih pasien terlebih dahulu");
+    if (!formData.polyclinic_id) return alert("Pilih Poliklinik tujuan");
     
     setLoading(true);
     try {
-      await api.post('/visits', formData);
-      fetchVisits();
-      // Reset form and dropdown
-      setFormData(prev => ({ ...prev, patient_id: '' }));
+      // Calculate queue number based on existing visits for today
+      // or just simple length + 1 for now
+      const currentMaxQueue = visits.length > 0 
+        ? Math.max(...visits.map(v => v.queue_number || 0)) 
+        : 0;
+      const queue_number = currentMaxQueue + 1;
+
+      const payload = {
+        ...formData,
+        queue_number,
+        // Ensure doctor_id is undefined/null if empty string (handled by backend mostly, but good to be clean)
+        doctor_id: formData.doctor_id || null
+      };
+
+      await api.post('/visits', payload);
+      
+      // Reload visits to show the new one immediately
+      await fetchVisits();
+      
+      setFormData({ patient_id: '', doctor_id: '', polyclinic_id: '' });
       setSelectedPatient(null);
       setPatientSearch('');
-      alert('Kunjungan berhasil dibuat!');
+      alert('Kunjungan berhasil dibuat! No. Antrian: ' + queue_number);
     } catch (err) {
-      alert('Error: ' + err.response?.data?.error);
+      console.error("Create Visit Error:", err);
+      alert('Error: ' + (err.response?.data?.error || err.message));
     } finally {
       setLoading(false);
     }
@@ -141,9 +165,8 @@ export default function Visits() {
               <div className="relative">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Pasien</label>
                 
-                {/* Searchable Dropdown Trigger */}
                 <div 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus-within:ring-2 focus-within:ring-yellow-500 bg-white cursor-pointer flex items-center justify-between"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus-within:ring-2 focus-within:ring-emerald-500 bg-white cursor-pointer flex items-center justify-between"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 >
                   <span className={selectedPatient ? "text-slate-900" : "text-slate-400"}>
@@ -152,7 +175,6 @@ export default function Visits() {
                   <Search size={16} className="text-slate-400" />
                 </div>
 
-                {/* Dropdown Menu */}
                 {isDropdownOpen && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden flex flex-col">
                     <div className="p-2 border-b border-slate-100 bg-slate-50 sticky top-0">
@@ -160,7 +182,7 @@ export default function Visits() {
                         autoFocus
                         type="text"
                         placeholder="Cari nama / NIK / ID..."
-                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-yellow-500"
+                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500"
                         value={patientSearch}
                         onChange={e => setPatientSearch(e.target.value)}
                         onClick={e => e.stopPropagation()}
@@ -173,7 +195,7 @@ export default function Visits() {
                         filteredPatients.map(p => (
                           <div
                             key={p.id}
-                            className="px-3 py-2 hover:bg-yellow-50 cursor-pointer text-sm border-b border-slate-50 last:border-0"
+                            className="px-3 py-2 hover:bg-emerald-50 cursor-pointer text-sm border-b border-slate-50 last:border-0"
                             onClick={() => {
                               setSelectedPatient(p);
                               setFormData({ ...formData, patient_id: p.id });
@@ -194,46 +216,50 @@ export default function Visits() {
                   </div>
                 )}
 
-                {/* Hidden Overlay to Close Dropdown */}
                 {isDropdownOpen && (
                   <div 
                     className="fixed inset-0 z-0" 
                     onClick={() => setIsDropdownOpen(false)}
                   ></div>
                 )}
-                
-                <p className="text-xs text-slate-400 mt-1">*Cari berdasarkan Nama, NIK, atau ID</p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Dokter / Poli</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Poli / Unit</label>
                 <select 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none bg-white"
-                  value={formData.doctor}
-                  onChange={e => setFormData({...formData, doctor: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                  value={formData.polyclinic_id}
+                  onChange={e => setFormData({...formData, polyclinic_id: e.target.value})}
                 >
-                  <option value="Poli Kebidanan & Kandungan">Poli Kebidanan & Kandungan</option>
-                  <option value="Poli Paru-paru">Poli Paru-paru</option>
-                  <option value="Poli Anak">Poli Anak</option>
-                  <option value="Poli Penyakit Dalam">Poli Penyakit Dalam</option>
-                  <option value="Poli Bedah">Poli Bedah</option>
-                  <option value="Poli Orthopedi">Poli Orthopedi</option>
-                  <option value="Poli Saraf">Poli Saraf</option>
-                  <option value="Poli Rehabilitasi Medik">Poli Rehabilitasi Medik</option>
-                  <option value="Poli Radiologi">Poli Radiologi</option>
-                  <option value="Poli Mata">Poli Mata</option>
-                  <option value="Poli Okupasi">Poli Okupasi</option>
-                  <option value="Poli Gigi">Poli Gigi</option>
-                  <option value="Poli Urologi">Poli Urologi</option>
-                  <option value="Poli THT BKL">Poli THT BKL</option>
-                  <option value="Poli Jantung & Pembuluh Darah">Poli Jantung & Pembuluh Darah</option>
+                  <option value="">-- Pilih Poli --</option>
+                  {polyclinics.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.type.replace('_',' ')})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Dokter (Opsional)</label>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                  value={formData.doctor_id}
+                  onChange={e => setFormData({...formData, doctor_id: e.target.value})}
+                >
+                  <option value="">-- Pilih Dokter (Boleh Kosong) --</option>
+                  {doctors
+                    .filter(d => !formData.polyclinic_id || String(d.polyclinic_id) === String(formData.polyclinic_id))
+                    .map(d => (
+                      <option key={d.id} value={d.id}>{d.users?.name} ({d.specialization})</option>
+                    ))
+                  }
                 </select>
               </div>
 
               <button
                 disabled={loading}
                 type="submit"
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm disabled:opacity-50"
               >
                 {loading ? 'Memproses...' : 'Buat Antrian'}
               </button>
@@ -251,7 +277,7 @@ export default function Visits() {
               </h3>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                  Maksimal 15 Terbaru
+                  Hari Ini
                 </span>
                 <div className="relative">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -269,11 +295,11 @@ export default function Visits() {
               <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 text-slate-900 font-bold">
                   <tr>
-                    <th className="p-4">ID Pasien</th>
-                    <th className="p-4">Waktu Kunjungan</th>
+                    <th className="p-4">Antrian</th>
                     <th className="p-4">Pasien</th>
-                    <th className="p-4">Dokter</th>
+                    <th className="p-4">Dokter / Poli</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4">Waktu</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -284,22 +310,28 @@ export default function Visits() {
                   ) : (
                     displayedVisits.map(v => (
                       <tr key={v.id} className="border-b border-slate-50 hover:bg-slate-50">
-                        <td className="p-4 font-mono text-xs text-slate-500">#{String(v.patient_id).padStart(3, '0')}</td>
-                        <td className="p-4 text-xs text-slate-500">
-                          {v.created_at ? new Date(v.created_at).toLocaleString('id-ID', {
-                            day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                          }) : '-'}
-                        </td>
-                        <td className="p-4 font-medium text-slate-900">{v.patients?.name || 'Unknown'}</td>
-                        <td className="p-4">{v.doctor}</td>
                         <td className="p-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                            v.status === 'closed' ? 'bg-slate-100 text-slate-500' :
+                            <div className="font-mono text-lg font-bold text-blue-600">{v.queue_code || `#${v.queue_number}`}</div>
+                            {v.queue_code && <div className="text-[10px] text-slate-400">Seq: {v.queue_number}</div>}
+                        </td>
+                        <td className="p-4 font-medium text-slate-900">
+                          {v.patients?.name || <span className="text-red-500 italic">Pasien (ID: {v.patient_id})</span>}
+                        </td>
+                        <td className="p-4">
+                          <div className="font-medium">{v.doctors?.users?.name || '-'}</div>
+                          <div className="text-xs text-slate-500">{v.polyclinics?.name || '-'}</div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-xs font-bold capitalize ${
+                            v.status === 'completed' ? 'bg-green-100 text-green-700' :
                             v.status === 'in_consultation' ? 'bg-blue-100 text-blue-700' :
-                            'bg-green-100 text-green-700'
+                            'bg-slate-100 text-slate-600'
                           }`}>
-                            {v.status === 'registered' ? 'Menunggu' : v.status}
+                            {v.status.replace('_', ' ')}
                           </span>
+                        </td>
+                        <td className="p-4 text-xs text-slate-500">
+                          {v.created_at ? new Date(v.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-'}
                         </td>
                       </tr>
                     ))
@@ -313,52 +345,9 @@ export default function Visits() {
                     className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium text-sm px-4 py-2 rounded-lg hover:bg-primary-50 transition-colors"
                   >
                     <ChevronDown size={16} />
-                    Lihat Lebih Banyak ({Math.min(5, filteredVisits.length - displayedVisits.length)} lagi)
+                    Lihat Lebih Banyak
                   </button>
                 </div>
-              )}
-            </div>
-
-            <div className="md:hidden p-4 space-y-3">
-              {displayedVisits.length === 0 ? (
-                <p className="text-center text-slate-400 py-6">
-                  {searchQuery ? 'Tidak ada kunjungan yang cocok dengan pencarian.' : 'Belum ada kunjungan.'}
-                </p>
-              ) : (
-                <>
-                  {displayedVisits.map(v => (
-                    <div key={v.id} className="border border-slate-100 rounded-lg p-4 bg-slate-50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col">
-                          <p className="font-bold text-slate-900">{v.patients?.name || 'Unknown'}</p>
-                          <span className="text-[10px] text-slate-400">
-                            {v.created_at ? new Date(v.created_at).toLocaleString('id-ID', {
-                              day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                            }) : '-'}
-                          </span>
-                        </div>
-                        <span className="text-xs font-mono text-slate-400">#{String(v.patient_id).padStart(3, '0')}</span>
-                      </div>
-                      <p className="text-sm text-slate-500 mt-2">{v.doctor}</p>
-                      <span className={`mt-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${
-                        v.status === 'closed' ? 'bg-slate-100 text-slate-500' :
-                        v.status === 'in_consultation' ? 'bg-blue-100 text-blue-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
-                        {v.status === 'registered' ? 'Menunggu' : v.status}
-                      </span>
-                    </div>
-                  ))}
-                  {displayedVisits.length < filteredVisits.length && (
-                    <button
-                      onClick={handleLoadMore}
-                      className="w-full flex items-center justify-center gap-2 text-primary-600 hover:text-primary-700 font-medium text-sm px-4 py-3 rounded-lg hover:bg-primary-50 border border-dashed border-primary-200 transition-colors"
-                    >
-                      <ChevronDown size={16} />
-                      Muat Lebih Banyak
-                    </button>
-                  )}
-                </>
               )}
             </div>
           </div>
