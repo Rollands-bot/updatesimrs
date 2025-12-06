@@ -338,7 +338,48 @@ export default function Visits() {
                   )}
                 </tbody>
               </table>
-              {displayedVisits.length < filteredVisits.length && (
+            </div>
+
+            {/* Mobile List View */}
+            <div className="md:hidden p-4 space-y-3 bg-slate-50/50">
+              {displayedVisits.length === 0 ? (
+                <div className="text-center text-slate-400 py-8 bg-white rounded-lg border border-dashed border-slate-200">
+                  {searchQuery ? 'Tidak ada kunjungan yang cocok.' : 'Belum ada kunjungan hari ini.'}
+                </div>
+              ) : (
+                displayedVisits.map(v => (
+                  <div key={v.id} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="font-mono text-lg font-bold text-blue-600">{v.queue_code || `#${v.queue_number}`}</div>
+                        <div className="text-xs text-slate-400 flex items-center gap-1">
+                          <Clock size={12} />
+                          {v.created_at ? new Date(v.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-'}
+                        </div>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                        v.status === 'completed' ? 'bg-green-50 text-green-700' :
+                        v.status === 'in_consultation' ? 'bg-blue-50 text-blue-700' :
+                        'bg-slate-100 text-slate-600'
+                      }`}>
+                        {v.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="space-y-1 pt-2 border-t border-slate-100 mt-2">
+                      <div className="font-medium text-slate-900">
+                        {v.patients?.name || <span className="text-red-500 italic">Pasien (ID: {v.patient_id})</span>}
+                      </div>
+                      <div className="text-sm text-slate-600 flex flex-wrap gap-2">
+                        <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">{v.polyclinics?.name || '-'}</span>
+                        {v.doctors?.users?.name && <span className="text-slate-500 text-xs flex items-center">• {v.doctors.users.name}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {displayedVisits.length < filteredVisits.length && (
                 <div className="p-4 border-t border-slate-100 text-center">
                   <button
                     onClick={handleLoadMore}
@@ -349,7 +390,6 @@ export default function Visits() {
                   </button>
                 </div>
               )}
-            </div>
           </div>
         </div>
       </div>

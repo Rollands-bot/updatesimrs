@@ -38,8 +38,8 @@ export default function Login() {
 
       <div className="max-w-md w-full bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 relative z-10 border border-white/20">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl mb-4 shadow-lg transform rotate-3 hover:rotate-6 transition-transform duration-300">
-            <HeartPulse className="w-10 h-10 text-white" />
+          <div className="inline-flex items-center justify-center w-24 h-24 mb-4 transform hover:scale-105 transition-transform duration-300">
+            <img src="/logoRS.png" alt="Logo RS Keluarga Kita" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">SIMRS <span className="text-emerald-600">Keluarga Kita</span></h1>
           <p className="text-slate-500 mt-2">Sistem Informasi Manajemen Rumah Sakit</p>

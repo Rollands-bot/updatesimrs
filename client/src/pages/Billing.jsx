@@ -395,8 +395,8 @@ export default function Billing() {
                    {/* Itemized Bill */}
                    <div className="mb-6">
                        <h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><List size={16}/> Rincian Tagihan</h4>
-                       <div className="border rounded-lg overflow-hidden">
-                           <table className="w-full text-sm text-left">
+                       <div className="border rounded-lg overflow-x-auto">
+                           <table className="w-full text-sm text-left min-w-[500px]">
                                <thead className="bg-slate-100 text-slate-700">
                                    <tr>
                                        <th className="p-3">Item</th>
@@ -457,7 +457,7 @@ export default function Billing() {
             <div className="p-4 border-b border-slate-200">
               <h3 className="font-bold text-slate-900">Riwayat Pembayaran Terakhir</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto hidden md:block">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
@@ -478,6 +478,20 @@ export default function Billing() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            
+            {/* Mobile Transaction Cards */}
+            <div className="md:hidden p-4 space-y-3 bg-slate-50/50">
+                {filteredTransactions.map(tx => (
+                    <div key={tx.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs text-slate-500">{new Date(tx.created_at).toLocaleString()}</span>
+                            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase font-bold">{tx.status}</span>
+                        </div>
+                        <div className="font-bold text-slate-900">{tx.patients?.name || 'Unknown'}</div>
+                        <div className="text-emerald-600 font-bold mt-1">{formatCurrency(tx.total_amount || tx.amount)}</div>
+                    </div>
+                ))}
             </div>
           </div>
         </div>
